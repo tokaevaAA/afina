@@ -61,8 +61,9 @@ public:
             while(!_threads.empty()){
                 _cv_wants_to_stop.wait(mylock);
             }
+            _state=Executor::State::kStopped;
         }
-        _state=Executor::State::kStopped;
+        
         //printf("tasks.size=%ld\n",_tasks.size());
         
     }
@@ -119,7 +120,10 @@ private:
                     (*it).detach();
                     //printf("detach\n");
                     executor->_threads.erase(it);
-                    executor->_cv_wants_to_stop.notify_all();
+                    if (executor->_threads.empty()) {
+                        executor->_state=Executor::State::kStopped;
+                        executor->_cv_wants_to_stop.notify_all();
+                    }
                     return;
                 }
             }
@@ -148,7 +152,7 @@ private:
             }
             
             try{task();}
-            catch(const std::exception& myex){
+            catch(...){
                 //printf("%s\n",myex.what());
                 std::terminate;
             }
