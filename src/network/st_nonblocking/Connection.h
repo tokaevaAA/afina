@@ -57,7 +57,7 @@ private:
     std::shared_ptr<Afina::Storage> pStorage;
     std::shared_ptr<spdlog::logger> _logger;
 
-    int out_queue=10;
+    int size_of_out_queue=10;
     int read_offset=0;
 
 

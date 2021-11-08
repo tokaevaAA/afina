@@ -86,7 +86,7 @@ void Connection::DoRead() {
                     // Send response
                     result += "\r\n";
                     _what_to_write_to_client.emplace(result);
-                    if (_what_to_write_to_client.size()==out_queue){
+                    if (_what_to_write_to_client.size()==size_of_out_queue){
                         _event.events &= ~EPOLLIN;
                     }
                     _event.events |= EPOLLOUT;
@@ -116,7 +116,7 @@ void Connection::DoRead() {
 // See Connection.h
 void Connection::DoWrite() {  
     while (!_what_to_write_to_client.empty()) {
-        std::string tek_elem = _what_to_write_to_client.front();
+        const std::string& tek_elem = _what_to_write_to_client.front();
         int sent_bytes = write(_socket, &tek_elem[write_offset], tek_elem.size() - write_offset);
         if (sent_bytes > 0) {
             write_offset += sent_bytes;
@@ -128,6 +128,10 @@ void Connection::DoWrite() {
         else if (sent_bytes == EWOULDBLOCK) { return; }
         else {OnClose(); return;}
         
+        if (_what_to_write_to_client.size() <= size_of_out_queue / 2) {
+            _event.events |= EPOLLIN;
+        }
+
     }
     _event.events &= ~EPOLLOUT;
 }
