@@ -31,14 +31,14 @@ public:
 
     Executor(std::string name, std::size_t max_queue_size, std::size_t low_watermark, std::size_t high_watermark, std::size_t idle_time):
      _name(std::move(name)), _max_queue_size(max_queue_size), _low_watermark(low_watermark), _high_watermark(high_watermark), _idle_time(idle_time) {
-         std::unique_lock<std::mutex> mylock(_mutex);
+         //std::unique_lock<std::mutex> mylock(_mutex); //when constructor is called, there is only one thread
          _state=State::kRun;
      }
 
     
     void Start(){
         //printf("In start!\n");
-        std::unique_lock<std::mutex> mylock(_mutex);
+        //std::unique_lock<std::mutex> mylock(_mutex); //threads are running (in amount <= low_watermark), but tasks is empty, so they won't delete themselves
         for (int i=0; i<_low_watermark; i=i+1){
             _threads.emplace_back(std::thread([this] {return perform(this);}));
         }
@@ -56,11 +56,14 @@ public:
         //printf("In stop!\n");
         std::unique_lock<std::mutex> mylock(_mutex);
         _state=Executor::State::kStopping;
-        _empty_condition.notify_all();
+        _empty_tasks_condition.notify_all();
         if (await){
             while(!_threads.empty()){
                 _cv_wants_to_stop.wait(mylock);
             }
+            _state=Executor::State::kStopped;
+        }
+        if (_low_watermark == 0){
             _state=Executor::State::kStopped;
         }
         
@@ -93,7 +96,7 @@ public:
         }
         //printf("In execute push task!\n");
         _tasks.push_back(exec);
-        _empty_condition.notify_one();
+        _empty_tasks_condition.notify_one();
         return true;
     }
 
@@ -108,19 +111,19 @@ private:
      * Main function that all pool threads are running. It polls internal task queue and execute tasks
      */
     
-    class SpecialClass{
+    class ThreadDestroyerClass{
     private:
         Executor* executor;
     public:
-        SpecialClass(Executor* myexecutor){executor=myexecutor;}
-        ~SpecialClass(){
+        ThreadDestroyerClass(Executor* myexecutor){executor=myexecutor;}
+        ~ThreadDestroyerClass(){
             auto this_thread=std::this_thread::get_id();
             for (auto it=executor->_threads.begin(); it<executor->_threads.end(); it=it+1){
                 if (it->get_id()==this_thread){
                     (*it).detach();
                     //printf("detach\n");
                     executor->_threads.erase(it);
-                    if (executor->_threads.empty()) {
+                    if (executor->_threads.empty() && executor->_state==Executor::State::kStopping) {
                         executor->_state=Executor::State::kStopped;
                         executor->_cv_wants_to_stop.notify_all();
                     }
@@ -131,20 +134,25 @@ private:
 
     };
     friend void perform(Executor *executor){
-        auto myobj=SpecialClass(executor);
 
         bool flagisrunning=true;
         while (flagisrunning){
             std::function<void()> task;
             {
                std::unique_lock<std::mutex> mylock(executor->_mutex);
-               while (executor->_tasks.empty()){
-                   executor->_empty_condition.wait_for(mylock, std::chrono::milliseconds(executor->_idle_time));
-                   //printf("woke up  %d, %d,  %ld!\n", std::this_thread::get_id(), executor->_tasks.empty(), executor->_tasks.size());
+               std::cv_status stat=std::cv_status::no_timeout;
+               while (executor->_tasks.empty() && stat==std::cv_status::no_timeout){
+                   stat=executor->_empty_tasks_condition.wait_for(mylock, std::chrono::milliseconds(executor->_idle_time));
                    if (executor->_tasks.empty() && executor->_threads.size() > executor->_low_watermark){
+                       auto myobj=ThreadDestroyerClass(executor); 
+                        //and here work destructor for SpecialClass
                        return;
                    } 
-                   if (executor->_tasks.empty() && executor->_state!=Executor::State::kRun){return;}
+                   if (executor->_tasks.empty() && executor->_state!=Executor::State::kRun){
+                       auto myobj=ThreadDestroyerClass(executor); 
+                        //and here work destructor for SpecialClass
+                       return;
+                    }
                } 
                task=std::move(executor->_tasks.front());
                executor->_tasks.pop_front();
@@ -158,6 +166,7 @@ private:
             }
         }
         std::unique_lock<std::mutex> mylock(executor->_mutex);
+        auto myobj=ThreadDestroyerClass(executor); 
         //and here work destructor for SpecialClass
     }
 
@@ -169,7 +178,7 @@ private:
     /**
      * Conditional variable to await new data in case of empty queue
      */
-    std::condition_variable _empty_condition;
+    std::condition_variable _empty_tasks_condition;
 
     /**
      * Vector of actual threads that perorm execution
