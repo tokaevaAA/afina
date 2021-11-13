@@ -85,8 +85,8 @@ void Connection::DoRead() {
 
                     // Send response
                     result += "\r\n";
-                    _what_to_write_to_client.emplace(result);
-                    if (_what_to_write_to_client.size()==size_of_out_queue){
+                    _what_to_write_to_client_queue.emplace(result);
+                    if (_what_to_write_to_client_queue.size()==max_size_of_to_client_queue){
                         _event.events &= ~EPOLLIN;
                     }
                     _event.events |= EPOLLOUT;
@@ -115,24 +115,35 @@ void Connection::DoRead() {
 
 // See Connection.h
 void Connection::DoWrite() {  
-    while (!_what_to_write_to_client.empty()) {
-        const std::string& tek_elem = _what_to_write_to_client.front();
+    while (_what_to_write_to_client_queue.size() > max_size_of_to_client_queue / 2 ) {
+        const std::string& tek_elem = _what_to_write_to_client_queue.front();
         int sent_bytes = write(_socket, &tek_elem[write_offset], tek_elem.size() - write_offset);
         if (sent_bytes > 0) {
             write_offset += sent_bytes;
             if (write_offset == tek_elem.size()) {
                 write_offset = 0;
-                _what_to_write_to_client.pop();
+                _what_to_write_to_client_queue.pop();
             }
         }
         else if (sent_bytes == EWOULDBLOCK) { return; }
         else {OnClose(); return;}
-        
-        if (_what_to_write_to_client.size() <= size_of_out_queue / 2) {
-            _event.events |= EPOLLIN;
-        }
-
     }
+    _event.events |= EPOLLIN;
+
+    while (!_what_to_write_to_client_queue.empty() ) {
+        const std::string& tek_elem = _what_to_write_to_client_queue.front();
+        int sent_bytes = write(_socket, &tek_elem[write_offset], tek_elem.size() - write_offset);
+        if (sent_bytes > 0) {
+            write_offset += sent_bytes;
+            if (write_offset == tek_elem.size()) {
+                write_offset = 0;
+                _what_to_write_to_client_queue.pop();
+            }
+        }
+        else if (sent_bytes == EWOULDBLOCK) { return; }
+        else {OnClose(); return;}
+    }
+    
     _event.events &= ~EPOLLOUT;
 }
 
