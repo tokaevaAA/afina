@@ -5,7 +5,9 @@
 
 #include <afina/coroutine/Engine.h>
 
-void _calculator_add(int &result, int left, int right) { result = left + right; }
+void _calculator_add(int &result, int left, int right) { 
+    result = left + right; 
+}
 
 TEST(CoroutineTest, SimpleStart) {
     Afina::Coroutine::Engine engine;
@@ -25,6 +27,7 @@ void printa(Afina::Coroutine::Engine &pe, std::stringstream &out, void *&other) 
 
     out << "A3 ";
     pe.sched(other);
+
 }
 
 void printb(Afina::Coroutine::Engine &pe, std::stringstream &out, void *&other) {
