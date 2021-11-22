@@ -4,6 +4,7 @@ generated/*
 # local cmake builds
 /build
 /cmake-build-debug
+/build_without_sanitizer
 
 # local config use to test changes
 config/_local.conf
@@ -12,3 +13,4 @@ config/_local.conf
 .vscode
 compile_commands.json
 cquery_log.txt
+

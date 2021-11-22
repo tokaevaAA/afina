@@ -146,7 +146,6 @@ public:
         
 
         idle_ctx = new context();
-        cur_routine=idle_ctx;
 
 
         if (setjmp(idle_ctx->Environment) > 0) {
@@ -156,8 +155,6 @@ public:
             // Here: correct finish of the coroutine section
             yield();
         } else if (pc != nullptr) {
-            idle_ctx->High=this->StackBottom;
-            Store(*idle_ctx);
             sched(pc);
         }
 
@@ -222,7 +219,6 @@ public:
             // We cannot return here, as this function "returned" once already, so here we must select some other
             // coroutine to run. As current coroutine is completed and can't be scheduled anymore, it is safe to
             // just give up and ask scheduler code to select someone else, control will never returns to this one
-            cur_routine=idle_ctx;
             Restore(*idle_ctx);
         }
 
