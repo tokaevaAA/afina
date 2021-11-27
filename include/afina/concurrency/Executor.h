@@ -136,29 +136,27 @@ private:
 
     };
     friend void perform(Executor *executor){
-
         std::unique_lock<std::mutex> mylock(executor->_mutex);
         auto myobj=ThreadDestroyerClass(executor);
-        bool flagisrunning=true;
-        while (flagisrunning){
+        while (executor->_state==Executor::State::kRun || !executor->_tasks.empty()){
             std::function<void()> task;
-            {
-               std::cv_status stat=std::cv_status::no_timeout;
-               while (executor->_tasks.empty() && stat==std::cv_status::no_timeout){
-                   stat=executor->_empty_tasks_condition.wait_for(mylock, std::chrono::milliseconds(executor->_idle_time));
-                   if (executor->_tasks.empty() && executor->_threads.size() > executor->_low_watermark){
-                        //and here work destructor for SpecialClass
-                       return;
-                   } 
-                   if (executor->_tasks.empty() && executor->_state!=Executor::State::kRun){
-                        //and here work destructor for SpecialClass
-                       return;
-                    }
-               } 
-               task=std::move(executor->_tasks.front());
-               executor->_tasks.pop_front();
-               flagisrunning=(executor->_state==Executor::State::kRun || !executor->_tasks.empty());
-            }
+            std::cv_status stat;
+            while (executor->_tasks.empty()){ //!empty, susp wakeup, !krun, timeout
+                stat=executor->_empty_tasks_condition.wait_for(mylock, std::chrono::milliseconds(executor->_idle_time));
+                if (stat==std::cv_status::no_timeout){ //susp wakeup
+                    continue;
+                }
+                if (executor->_tasks.empty() && executor->_threads.size() > executor->_low_watermark){
+                    //and here work destructor for SpecialClass
+                    return;
+                } 
+                if (executor->_tasks.empty() && executor->_state!=Executor::State::kRun){
+                    //and here work destructor for SpecialClass
+                    return;
+                }
+            } 
+            task=std::move(executor->_tasks.front());
+            executor->_tasks.pop_front();
             mylock.unlock();
             try{task();}
             catch(...){
