@@ -22,7 +22,8 @@ void Connection::OnClose() {
 }
 
 // See Connection.h
-void Connection::DoRead() {  
+void Connection::DoRead() { 
+    std::atomic_thread_fence(std::memory_order_acquire); //loadload+storeload
     try {
         int readed_bytes = -1;
         if ((readed_bytes = read(_socket, client_buffer+read_offset, sizeof(client_buffer))) > 0) {
@@ -110,11 +111,13 @@ void Connection::DoRead() {
         OnClose();
 
     }
+    std::atomic_thread_fence(std::memory_order_release);
 
 }
 
 // See Connection.h
 void Connection::DoWrite() {  
+    std::atomic_thread_fence(std::memory_order_acquire); //loadload+storeload
     while (!_what_to_write_to_client.empty()) {
         std::string tek_elem = _what_to_write_to_client.front();
         int sent_bytes = write(_socket, &tek_elem[write_offset], tek_elem.size() - write_offset);
@@ -130,6 +133,7 @@ void Connection::DoWrite() {
         
     }
     _event.events &= ~EPOLLOUT;
+    std::atomic_thread_fence(std::memory_order_release); //loadstore+storestore
 }
 
 

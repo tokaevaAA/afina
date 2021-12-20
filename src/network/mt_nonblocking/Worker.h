@@ -57,6 +57,9 @@ public:
      */
     void Join();
 
+    std::mutex* _ptr_to_mutex;
+    std::set<Connection*>* _ptr_to_set_of_connections;
+
 protected:
     /**
      * Method executing by background thread
@@ -84,6 +87,7 @@ private:
 
     // EPOLL descriptor using for events processing
     int _epoll_fd;
+
 
     
 };

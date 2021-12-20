@@ -14,6 +14,7 @@
 #include <afina/logging/Service.h>
 
 #include "protocol/Parser.h"
+#include <atomic>
 
 namespace Afina {
 namespace Network {
@@ -42,7 +43,7 @@ private:
     friend class Worker;
     friend class ServerImpl;
 
-    bool isalive=true;
+    std::atomic<bool> isalive{true};
     int _socket;
     struct epoll_event _event;
 
@@ -59,6 +60,7 @@ private:
 
     int out_queue=10;
     int read_offset=0;
+    
 };
 
 } // namespace MTnonblock

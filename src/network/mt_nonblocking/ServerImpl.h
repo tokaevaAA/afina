@@ -67,7 +67,8 @@ private:
     // threads serving read/write requests
     std::vector<Worker> _workers;
 
-    
+    std::set<Connection*> _set_of_connections;
+    std::mutex _mutex_for_set;
     
 
     

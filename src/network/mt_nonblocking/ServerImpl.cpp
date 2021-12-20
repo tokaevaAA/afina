@@ -106,6 +106,8 @@ void ServerImpl::Start(uint16_t port, uint32_t n_acceptors, uint32_t n_workers) 
     for (int i = 0; i < n_acceptors; i++) {
         _acceptors.emplace_back(&ServerImpl::OnRun, this);
     }
+
+
 }
 
 // See Server.h
@@ -116,12 +118,19 @@ void ServerImpl::Stop() {
         w.Stop();
     }
 
+    std::unique_lock<std::mutex> mylock(_mutex_for_set);
+    for (auto el:_set_of_connections){
+        el->_event.events &= ~EPOLLIN;
+    }
+    mylock.unlock();
+
     // Wakeup threads that are sleep on epoll_wait
     for (int i=0; i<_workers.size(); i=i+1){
         if (eventfd_write(_event_fd, 1)) {
             throw std::runtime_error("Failed to wakeup workers");
         }
     }
+    
 }
 
 // See Server.h
@@ -138,6 +147,13 @@ void ServerImpl::Join() {
 // See ServerImpl.h
 void ServerImpl::OnRun() {
     _logger->info("Start acceptor");
+
+    for (auto& el:_workers){
+        el._ptr_to_mutex=&_mutex_for_set;
+        el._ptr_to_set_of_connections=&_set_of_connections;
+    }
+
+
     int acceptor_epoll = epoll_create1(0);
     if (acceptor_epoll == -1) {
         throw std::runtime_error("Failed to create epoll file descriptor: " + std::string(strerror(errno)));
@@ -212,9 +228,19 @@ void ServerImpl::OnRun() {
                         delete pc;
                     }
                 }
+                std::unique_lock<std::mutex> mylock(_mutex_for_set);
+                _set_of_connections.insert(pc);
+                mylock.unlock();
             }
         }
     }
+    std::unique_lock<std::mutex> mylock(_mutex_for_set);
+    for (auto el:_set_of_connections){
+        close(el->_socket);
+        delete el;
+    }
+    _set_of_connections.clear();
+    
     _logger->warn("Acceptor stopped");
 }
 
