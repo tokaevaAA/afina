@@ -128,7 +128,10 @@ void Connection::DoWrite() {
                 _what_to_write_to_client.pop();
             }
         }
-        else if (sent_bytes == EWOULDBLOCK) { return; }
+        else if (sent_bytes == EWOULDBLOCK) {
+            std::atomic_thread_fence(std::memory_order_release); //loadstore+storestore
+            return; 
+        }
         else {OnClose(); return;}
         
     }

@@ -120,7 +120,8 @@ void ServerImpl::Stop() {
 
     std::unique_lock<std::mutex> mylock(_mutex_for_set);
     for (auto el:_set_of_connections){
-        el->_event.events &= ~EPOLLIN;
+        //el->_event.events &= ~EPOLLIN;
+        shutdown(el->_socket, 0);
     }
     mylock.unlock();
 
@@ -142,6 +143,13 @@ void ServerImpl::Join() {
     for (auto &w : _workers) {
         w.Join();
     }
+
+    std::unique_lock<std::mutex> mylock(_mutex_for_set);
+    for (auto el:_set_of_connections){
+        close(el->_socket);
+        delete el;
+    }
+    _set_of_connections.clear();
 }
 
 // See ServerImpl.h
@@ -234,12 +242,7 @@ void ServerImpl::OnRun() {
             }
         }
     }
-    std::unique_lock<std::mutex> mylock(_mutex_for_set);
-    for (auto el:_set_of_connections){
-        close(el->_socket);
-        delete el;
-    }
-    _set_of_connections.clear();
+    
     
     _logger->warn("Acceptor stopped");
 }
